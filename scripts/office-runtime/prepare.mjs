@@ -13,6 +13,17 @@ const require = createRequire(import.meta.url)
 const project = resolve(import.meta.dirname, '../..')
 const lock = JSON.parse(await readFile(new URL('./lock.json', import.meta.url), 'utf8'))
 
+/** Platform recorded in runtime.json must match what the packaging verifier
+ * compares against Node's `process.platform`, including Linux. Deriving it from
+ * the target key keeps the payload honest on every supported native target.
+ */
+export function manifestPlatform(target) {
+  if (target.startsWith('win-')) return 'win32'
+  if (target.startsWith('mac-')) return 'darwin'
+  if (target.startsWith('linux-')) return 'linux'
+  throw new Error(`Office runtime: unknown target family ${target}`)
+}
+
 export function officeTarget(platform = process.platform, arch = process.arch) {
   const target = `${platform === 'darwin' ? 'mac' : platform === 'win32' ? 'win' : platform}-${arch}`
   if (!Object.hasOwn(lock.targets, target)) throw new Error(`Office runtime: unsupported native target ${platform}/${arch}`)
@@ -131,7 +142,7 @@ export async function prepareOfficeRuntime({ target = officeTarget(), output = j
     await stripUnusedPythonPayload(dependencies, pythonLib, sitePackages)
     const manifest = {
       desktopVersion: version,
-      platform: windows ? 'win32' : 'darwin',
+      platform: manifestPlatform(target),
       arch: target.endsWith('arm64') ? 'arm64' : 'x64',
       payloadDigest: createHash('sha256').update(JSON.stringify({ format: 1, target, artifact, python: lock.pythonVersion, release: lock.pythonRelease, wheels: lock.wheels, packages: lock.pythonPackages })).digest('hex'),
       python: lock.pythonVersion,

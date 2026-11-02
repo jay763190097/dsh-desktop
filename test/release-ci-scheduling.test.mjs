@@ -52,6 +52,27 @@ describe('release CI scheduling', () => {
     expect(jobs['validate-shared-runtime']).toBeUndefined()
     expect(jobs.macos.needs).toBe('validate-dispatch')
     expect(jobs['windows-x64'].needs).toBe('validate-dispatch')
+    expect(jobs['linux-x64'].needs).toBe('validate-dispatch')
+  })
+
+  // The shared suite stays on macOS so Linux cannot quietly become a third
+  // copy of the same tests; both publish gates must still wait for the deb.
+  it('builds Linux on dispatch, pull requests and tags without duplicating shared checks', () => {
+    const linux = jobs['linux-x64']
+    expect(linux.if).toContain("inputs.target == 'all' || inputs.target == 'linux'")
+    expect(linux.steps.some(candidate => (candidate.run ?? '').includes('vitest run'))).toBe(false)
+    expect(linux.steps.some(candidate => (candidate.run ?? '').includes('npm run typecheck'))).toBe(false)
+    expect(enabled(linux.if, { target: 'linux' })).toBe(true)
+    expect(enabled(linux.if, { target: 'windows' })).toBe(false)
+    expect(enabled(linux.if, { mode: 'resign', target: 'linux' })).toBe(false)
+    expect(enabled(linux.if, { event: 'pull_request' })).toBe(true)
+    expect(enabled(linux.if, { event: 'push', ref: 'refs/tags/v1.0.0' })).toBe(true)
+    const release = linux.steps.find(candidate => candidate.name === 'Build Linux release package')
+    expect(release.run).toContain('scripts/verify-target.mjs linux x64')
+    expect(release.run).toContain('--publish never')
+    for (const name of ['publish', 'publish-prerelease']) {
+      expect(jobs[name].needs).toContain('linux-x64')
+    }
   })
 
   it.each([
@@ -118,7 +139,7 @@ describe('release CI scheduling', () => {
   })
 
   it('restores Electron before ci and retains install scripts plus timing evidence', () => {
-    for (const name of ['macos', 'windows-x64']) {
+    for (const name of ['macos', 'windows-x64', 'linux-x64']) {
       const steps = jobs[name].steps
       const installIndex = steps.findIndex(candidate => candidate.name === 'Install dependencies with timings')
       const configIndex = steps.findIndex(candidate => candidate.name === 'Configure native download caches before dependency installation')

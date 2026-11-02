@@ -30,6 +30,7 @@ on:
           - all
           - windows
           - macos
+          - linux
       version:
         description: 版本（开发包留空；测试包如 0.13.0-test.4；继续正式发布如 v0.13.0）
         required: false
@@ -74,7 +75,7 @@ jobs:
         run: |
           set -euo pipefail
           semver_re='^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$'
-          if ! [[ "$TARGET" =~ ^(all|windows|macos)$ ]] || ! [[ "$CHECKS" =~ ^(standard|extended)$ ]]; then
+          if ! [[ "$TARGET" =~ ^(all|windows|macos|linux)$ ]] || ! [[ "$CHECKS" =~ ^(standard|extended)$ ]]; then
             echo "::error::Choose a valid platform and validation level"
             exit 1
           fi
@@ -649,6 +650,112 @@ jobs:
           compression-level: 0
           if-no-files-found: error
 
+  linux-x64:
+    name: Linux x64
+    needs: validate-dispatch
+    if: >-
+      inputs.mode != 'publish' && (startsWith(github.ref, 'refs/tags/v') ||
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_dispatch' &&
+        inputs.mode != 'resign' &&
+        (inputs.target == 'all' || inputs.target == 'linux')))
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Set app version from release tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: npm version --no-git-tag-version --allow-same-version "${{ github.ref_name }}"
+      - name: Set app version from pre-release tag
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'prerelease' && inputs.version != ''
+        run: npm version --no-git-tag-version --allow-same-version "${{ inputs.version }}"
+      - name: Set app version from signed version
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'signed' && inputs.version != ''
+        run: npm version --no-git-tag-version --allow-same-version "${{ inputs.version }}"
+      - name: Configure native download caches before dependency installation
+        shell: bash
+        run: |
+          # Electron 44 install.js reads the lowercase setting; builder uses uppercase.
+          echo "electron_config_cache=$RUNNER_TEMP/electron-cache" >> "$GITHUB_ENV"
+          echo "ELECTRON_CACHE=$RUNNER_TEMP/electron-cache" >> "$GITHUB_ENV"
+          echo "ELECTRON_BUILDER_CACHE=$RUNNER_TEMP/electron-builder-cache" >> "$GITHUB_ENV"
+      - name: Cache Electron downloads before dependency installation
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.ELECTRON_CACHE }}
+          key: electron-downloads-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: electron-downloads-v1-${{ runner.os }}-${{ runner.arch }}-
+      - name: Install the Electron runtime libraries the packaged gates load
+        run: |
+          # afterPack runs the packaged Electron in Node mode (Harness boot,
+          # Office conversion, PPT render), so its shared-library closure has to
+          # be present on the runner, not only on a developer desktop.
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgtk-3-0t64 libnotify4 libnss3 libxss1 libxtst6 xdg-utils \
+            libatspi2.0-0t64 libuuid1 libsecret-1-0t64 libasound2t64 libgbm1
+      - name: Install dependencies with timings
+        run: npm ci --prefer-offline --no-audit --no-fund --timing --logs-dir "${{ runner.temp }}/npm-timings"
+      - name: Upload dependency installation timings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-timings-${{ github.job }}-${{ runner.arch }}
+          path: ${{ runner.temp }}/npm-timings/*-timing.json
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Cache Office runtime downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            .build/office-downloads
+          key: office-runtime-${{ runner.os }}-x64-${{ hashFiles('scripts/office-runtime/**', 'packages/office-runtime/**', 'package-lock.json') }}
+          restore-keys: |
+            office-runtime-${{ runner.os }}-x64-
+      - name: Cache generated Office and PPT assets
+        uses: actions/cache@v4
+        with:
+          enableCrossOsArchive: true
+          path: |
+            .build/office-template-cache
+            .build/ppt-runtime
+          key: desktop-generated-assets-v1-${{ hashFiles('scripts/office-runtime/**', 'packages/dsh-desktop-office/**', 'scripts/*ppt*.mjs', 'scripts/ppt/**', 'packages/ppt-runtime/**', 'package-lock.json') }}
+          restore-keys: desktop-generated-assets-v1-
+      - run: npm run build
+      - name: Verify PPT generation leaves tracked sources clean
+        run: git diff --exit-code -- packages/ppt-runtime scripts/ppt
+      - name: Build Linux release package
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (inputs.mode == 'signed' || inputs.mode == 'prerelease'))
+        run: node scripts/verify-target.mjs linux x64 && npx --no-install electron-builder --linux --x64 --publish never
+      - name: Build isolated Linux development package
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') && (github.event_name != 'workflow_dispatch' || inputs.mode == 'development') }}
+        run: node scripts/verify-target.mjs linux x64 && npx --no-install electron-builder --linux --x64 --publish never --config electron-builder.dev.cjs
+      - uses: actions/upload-artifact@v4
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (inputs.mode == 'signed' || inputs.mode == 'prerelease'))
+        with:
+          name: linux-x64
+          retention-days: 7
+          path: |
+            dist/dsh-desktop-linux-x64.deb
+            dist/latest-linux.yml
+          compression-level: 0
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') && (github.event_name != 'workflow_dispatch' || inputs.mode == 'development') }}
+        with:
+          name: linux-x64-dev
+          retention-days: 3
+          path: |
+            dist-dev/dsh-desktop-dev-linux-x64.deb
+            dist-dev/latest-linux.yml
+          compression-level: 0
+          if-no-files-found: error
+
   sign-windows:
     name: Sign Windows package locally with UKey
     needs: [validate-dispatch, windows-x64]
@@ -884,10 +991,12 @@ jobs:
       ((github.event_name == 'workflow_dispatch' && inputs.mode == 'publish') ||
        (inputs.mode != 'publish' && startsWith(github.ref, 'refs/tags/v') &&
         inputs.version == '' && needs.macos.result == 'success' &&
+        needs['linux-x64'].result == 'success' &&
         needs.sign-windows.result == 'success'))
     needs:
       - validate-dispatch
       - macos
+      - linux-x64
       - sign-windows
     permissions:
       actions: read
@@ -928,6 +1037,11 @@ jobs:
         if: inputs.mode != 'publish'
         with:
           name: windows-x64
+          path: release-assets
+      - uses: actions/download-artifact@v4
+        if: inputs.mode != 'publish'
+        with:
+          name: linux-x64
           path: release-assets
       - name: Download verified signed artifacts from original run
         if: inputs.mode == 'publish'
@@ -1170,9 +1284,11 @@ jobs:
       inputs.target == 'all' &&
       inputs.version != '' &&
       needs.macos.result == 'success' &&
+      needs['linux-x64'].result == 'success' &&
       needs.sign-windows.result == 'success'
     needs:
       - macos
+      - linux-x64
       - sign-windows
     runs-on: ubuntu-24.04
     steps:
@@ -1192,6 +1308,10 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: windows-x64
+          path: release-assets
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-x64
           path: release-assets
       - name: Merge macOS update metadata
         run: |

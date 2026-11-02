@@ -316,6 +316,8 @@ describe('GitHub release contract', () => {
       'latest-mac-x64.yml',
       'latest-mac.yml',
       'latest.yml',
+      'latest-linux.yml',
+      'dsh-desktop-linux-x64.deb',
       'dsh-desktop-mac-${{ matrix.arch }}.zip.blockmap',
       'dsh-desktop-windows-x64-setup.exe.blockmap'
     ]) {
@@ -336,12 +338,20 @@ describe('GitHub release contract', () => {
       'package:mac:arm64',
       'package:mac:x64',
       'package:win',
+      'package:linux',
+      'package:linux:arm64',
       'package:dev:mac:arm64',
       'package:dev:mac:x64',
-      'package:dev:win'
+      'package:dev:win',
+      'package:dev:linux'
     ]) {
       expect(packageJson.scripts[script]).toContain('--publish never')
     }
+    // Each Linux package command must prove the build host matches the target,
+    // the same rule macOS and Windows follow: the gates load native modules.
+    expect(packageJson.scripts['package:linux']).toContain('verify-target.mjs linux x64')
+    expect(packageJson.scripts['package:linux:arm64']).toContain('verify-target.mjs linux arm64')
+    expect(packageJson.scripts['package:dev:linux']).toContain('verify-target.mjs linux x64')
   })
 
   it('uses the staged-directory installer for both Windows builds and signed repackaging', async () => {
@@ -367,6 +377,7 @@ describe('GitHub release contract', () => {
       extraMetadata: { dshDesktopChannel: string }
       artifactName: string
       nsis: { artifactName: string }
+      linux: { artifactName: string }
     }
 
     expect(packageJson.scripts['package:dev:dir']).toContain('npm run build')
@@ -384,6 +395,7 @@ describe('GitHub release contract', () => {
     expect(developmentConfig.extraMetadata.dshDesktopChannel).toBe('development')
     expect(developmentConfig.artifactName).toBe('dsh-desktop-dev-${os}-${arch}.${ext}')
     expect(developmentConfig.nsis.artifactName).toBe('dsh-desktop-dev-windows-${arch}-setup.${ext}')
+    expect(developmentConfig.linux.artifactName).toBe('dsh-desktop-dev-linux-${arch}.${ext}')
   })
 
   it('builds and publishes every supported platform', async () => {
@@ -423,13 +435,18 @@ describe('GitHub release contract', () => {
     expect(workflow).toContain('--prerelease')
     expect(workflow).toContain('name: windows-x64-dev')
     expect(workflow).toContain('dist-dev/dsh-desktop-dev-windows-x64-setup.exe')
+    expect(workflow).toContain('name: linux-x64-dev')
+    expect(workflow).toContain('dist-dev/dsh-desktop-dev-linux-x64.deb')
+    expect(workflow).toContain('dist/dsh-desktop-linux-x64.deb')
     expect(workflow).toContain('dsh-desktop-mac-${{ matrix.arch }}.dmg')
     expect(workflow).toContain('dsh-desktop-windows-x64-setup.exe')
     expect(
       workflow.match(
         /npm version --no-git-tag-version --allow-same-version "\$\{\{ github\.ref_name \}\}"/g
       )
-    ).toHaveLength(3)
+      // One tag-version step per native build job: macOS arm64, macOS x64,
+      // Windows x64 and Linux x64.
+    ).toHaveLength(4)
   })
 
   it('signs and notarizes both macOS architectures on tag releases', async () => {
@@ -638,6 +655,7 @@ describe('prerelease parity workflow', () => {
     expect(yml).toContain('requires a non-v semver version')
     expect(windowsIf).toContain("inputs.target == 'all' || inputs.target == 'windows'")
     expect(windowsIf).not.toContain('prerelease_tag')
+    expect(yml).toContain("inputs.target == 'all' || inputs.target == 'linux'")
     expect(signWindows).toContain("inputs.mode == 'signed'")
     expect(signWindows).toContain("inputs.mode == 'prerelease'")
     expect(publishJob).toContain("startsWith(github.ref, 'refs/tags/v')")
@@ -649,7 +667,9 @@ describe('prerelease parity workflow', () => {
       yml.match(
         /npm version --no-git-tag-version --allow-same-version "\$\{\{ inputs\.version \}\}"/g
       )
-    ).toHaveLength(6)
+      // Prerelease and signed dispatch each set the version in every native
+      // build job: macOS x2, Windows x2 and Linux x2.
+    ).toHaveLength(8)
   })
 
   it('mirrors a prerelease to an isolated ModelScope directory', async () => {

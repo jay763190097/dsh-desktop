@@ -25,11 +25,18 @@ describe('desktop update policy', () => {
     expect(AUTO_INSTALL_ON_APP_QUIT).toBe(false)
   })
 
-  it('only enables updates for installed macOS and Windows builds', () => {
+  it('enables updates for installed macOS, Windows and Linux builds only', () => {
+    // Old contract excluded linux because electron-updater had no deb path.
+    // The pinned electron-updater ships DebUpdater, which installs through
+    // dpkg/apt with an elevation prompt, so a packaged Linux build updates too.
+    // A failure here means Linux installs silently stop receiving updates, or
+    // an unpackaged development build starts trying to write to /opt.
     expect(supportsAutoUpdates(true, 'darwin')).toBe(true)
     expect(supportsAutoUpdates(true, 'win32')).toBe(true)
-    expect(supportsAutoUpdates(true, 'linux')).toBe(false)
+    expect(supportsAutoUpdates(true, 'linux')).toBe(true)
+    expect(supportsAutoUpdates(true, 'freebsd')).toBe(false)
     expect(supportsAutoUpdates(false, 'darwin')).toBe(false)
+    expect(supportsAutoUpdates(false, 'linux')).toBe(false)
   })
 
   it('checks after resume only when the interval has elapsed', () => {

@@ -18,7 +18,7 @@ describe('configureRollout', () => {
     expect(isValidVersion(null)).toBe(false)
   })
 
-  it('creates rollout rules for all 3 platforms when none exist', async () => {
+  it('creates rollout rules for every supported platform when none exist', async () => {
     const calls: Array<{ url: string; method?: string; body?: unknown; headers?: unknown }> = []
     const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
       const method = init?.method || 'GET'
@@ -46,12 +46,12 @@ describe('configureRollout', () => {
       log: (msg: string) => logs.push(msg)
     })
 
-    expect(results).toHaveLength(3)
+    expect(results).toHaveLength(SUPPORTED_PLATFORMS.length)
     expect(results.map((r) => r.platform)).toEqual(SUPPORTED_PLATFORMS)
     expect(results.every((r) => r.action === 'created')).toBe(true)
 
-    // 1 GET + 3 POSTs = 4 calls
-    expect(calls).toHaveLength(4)
+    // 1 GET + one POST per supported platform
+    expect(calls).toHaveLength(1 + SUPPORTED_PLATFORMS.length)
     expect(calls[0]?.method).toBe('GET')
     expect(calls[0]?.headers).toMatchObject({
       Authorization: 'Bearer test-admin-token-12345678901234567890'
@@ -117,14 +117,18 @@ describe('configureRollout', () => {
       fetchImpl
     })
 
-    expect(results).toHaveLength(3)
+    expect(results).toHaveLength(SUPPORTED_PLATFORMS.length)
     const macResult = results.find((r) => r.platform === 'mac')
     const winResult = results.find((r) => r.platform === 'windows')
     const intelResult = results.find((r) => r.platform === 'mac-intel')
+    const linuxResult = results.find((r) => r.platform === 'linux')
 
     expect(macResult?.action).toBe('updated')
     expect(winResult?.action).toBe('updated')
     expect(intelResult?.action).toBe('created')
+    // A platform the service has never seen is created rather than skipped, so
+    // adding Linux to SUPPORTED_PLATFORMS actually reaches the rollout API.
+    expect(linuxResult?.action).toBe('created')
 
     const macPut = calls.find((c) => c.url.endsWith('/admin/api/releases/uuid-mac'))
     expect(macPut?.method).toBe('PUT')
@@ -150,7 +154,9 @@ describe('configureRollout', () => {
           JSON.stringify([
             { id: 'race-mac', version: '0.9.0', platform: 'mac', revision: 1 },
             { id: 'race-intel', version: '0.9.0', platform: 'mac-intel', revision: 1 },
-            { id: 'race-win', version: '0.9.0', platform: 'windows', revision: 1 }
+            { id: 'race-win', version: '0.9.0', platform: 'windows', revision: 1 },
+            { id: 'race-linux', version: '0.9.0', platform: 'linux', revision: 1 },
+            { id: 'race-linux-arm64', version: '0.9.0', platform: 'linux-arm64', revision: 1 }
           ]),
           { status: 200 }
         )
@@ -173,7 +179,7 @@ describe('configureRollout', () => {
       warn: (msg: string) => warnings.push(msg)
     })
 
-    expect(results).toHaveLength(3)
+    expect(results).toHaveLength(SUPPORTED_PLATFORMS.length)
     expect(results.every((r) => r.action === 'updated-after-conflict')).toBe(true)
     expect(warnings.length).toBeGreaterThan(0)
   })

@@ -63,9 +63,14 @@ describe('desktop service', () => {
     expect(desktopPlatform('darwin', 'arm64')).toBe('mac')
     expect(desktopPlatform('darwin', 'x64')).toBe('mac-intel')
     expect(desktopPlatform('win32', 'x64')).toBe('windows')
+    // Linux packages one deb per architecture; both keys reach the update and
+    // crash service, which used to reject the platform outright.
+    expect(desktopPlatform('linux', 'x64')).toBe('linux')
+    expect(desktopPlatform('linux', 'arm64')).toBe('linux-arm64')
     expect(isPrereleaseVersion('0.9.0+build-info')).toBe(false)
     expect(isPrereleaseVersion('0.9.0-rc.1+build')).toBe(true)
-    expect(() => desktopPlatform('linux', 'x64')).toThrow('Unsupported')
+    expect(() => desktopPlatform('linux', 'armv7l')).toThrow('Unsupported')
+    expect(() => desktopPlatform('freebsd', 'x64')).toThrow('Unsupported')
   })
   it('uploads exactly the last 100 lines, with redaction before disk, and consumes the report after one upload attempt', async () => {
     const { options, request, service, dir } = fixture()
@@ -263,6 +268,20 @@ describe('desktop service', () => {
     await expect(service.checkUpdate()).rejects.toThrow('Invalid')
     request.mockResolvedValue(new Response(JSON.stringify({ updateAvailable: true, version: '0.9.0', feedUrl: 'https://dshdesktop.com/updates/archive/0.9.0/' })))
     expect(await service.checkUpdate()).toMatchObject({ updateAvailable: true, version: '0.9.0' })
+  })
+  it('constructs on Linux and queries the policy service with the linux platform key', async () => {
+    // Linux used to fail here: the constructor threw, initializeDesktopService
+    // swallowed it, and every update check reported "service is unavailable".
+    const { options, request } = fixture()
+    const service = new DesktopService({ ...options, platform: 'linux', arch: 'x64' })
+    expect(service.platform).toBe('linux')
+    request.mockResolvedValue(Response.json({ updateAvailable: false }))
+    await expect(service.checkUpdate()).resolves.toEqual({ updateAvailable: false })
+    const call = request.mock.calls[0]
+    if (!call) throw new Error('Expected an update policy request')
+    expect(new URL(call[0]).pathname).toBe('/crash/v1/updates/check')
+    expect(new URL(call[0]).searchParams.get('platform')).toBe('linux')
+    expect(new DesktopService({ ...options, platform: 'linux', arch: 'arm64' }).platform).toBe('linux-arm64')
   })
 })
 describe('diagnostic event integration', () => {

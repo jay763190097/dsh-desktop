@@ -1,6 +1,8 @@
 import { fileURLToPath } from 'node:url'
 
-export const SUPPORTED_PLATFORMS = ['mac', 'mac-intel', 'windows']
+// Keys must match desktopPlatform() in src/main/desktop-service/service.ts:
+// the crash service only rolls out to platforms it is told about.
+export const SUPPORTED_PLATFORMS = ['mac', 'mac-intel', 'windows', 'linux', 'linux-arm64']
 export const DEFAULT_BASE_URL = 'https://dshdesktop.com/crash'
 export const DEFAULT_PERCENTAGE = 5
 

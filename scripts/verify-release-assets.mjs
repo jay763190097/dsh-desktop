@@ -14,8 +14,10 @@ const REQUIRED_ASSETS = [
   'dsh-desktop-mac-x64.zip.blockmap',
   'dsh-desktop-windows-x64-setup.exe',
   'dsh-desktop-windows-x64-setup.exe.blockmap',
+  'dsh-desktop-linux-x64.deb',
   'latest-mac.yml',
-  'latest.yml'
+  'latest.yml',
+  'latest-linux.yml'
 ]
 
 // A complete DSH Desktop runtime is substantially larger than these floors.
@@ -24,6 +26,7 @@ const DEFAULT_MINIMUM_BYTES = {
   dmg: 100 * 1024 * 1024,
   zip: 100 * 1024 * 1024,
   exe: 100 * 1024 * 1024,
+  deb: 100 * 1024 * 1024,
   blockmap: 1024,
   yml: 64
 }
@@ -44,14 +47,24 @@ function assetKind(name) {
   if (name.endsWith('.dmg')) return 'dmg'
   if (name.endsWith('.zip')) return 'zip'
   if (name.endsWith('.exe')) return 'exe'
+  if (name.endsWith('.deb')) return 'deb'
   if (name.endsWith('.yml')) return 'yml'
   throw new Error(`Unsupported release asset: ${name}`)
 }
 
 async function assertFileHeader(file, kind, size) {
-  if (kind !== 'exe' && kind !== 'zip' && kind !== 'dmg') return
+  if (kind !== 'exe' && kind !== 'zip' && kind !== 'dmg' && kind !== 'deb') return
   const handle = await open(file, 'r')
   try {
+    if (kind === 'deb') {
+      // dpkg deb archives are GNU `ar` files; the magic is the first 8 bytes.
+      const header = Buffer.alloc(8)
+      const { bytesRead } = await handle.read(header, 0, header.length, 0)
+      if (bytesRead !== header.length || !header.equals(Buffer.from('!<arch>\n'))) {
+        throw new Error(`${basename(file)} is not a deb (ar) archive`)
+      }
+      return
+    }
     if (kind === 'exe' || kind === 'zip') {
       const header = Buffer.alloc(2)
       const { bytesRead } = await handle.read(header, 0, header.length, 0)
@@ -112,6 +125,7 @@ export async function verifyReleaseAssets(releaseDir, version, options = {}) {
   await assertUpdateEntry(root, 'latest.yml', version, 'dsh-desktop-windows-x64-setup.exe')
   await assertUpdateEntry(root, 'latest-mac.yml', version, 'dsh-desktop-mac-arm64.zip')
   await assertUpdateEntry(root, 'latest-mac.yml', version, 'dsh-desktop-mac-x64.zip')
+  await assertUpdateEntry(root, 'latest-linux.yml', version, 'dsh-desktop-linux-x64.deb')
 }
 
 async function main() {

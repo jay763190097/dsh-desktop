@@ -7,6 +7,7 @@ const { execFile, spawn } = require('node:child_process')
 const { promisify } = require('node:util')
 const { pathToFileURL } = require('node:url')
 const { runInNewContext } = require('node:vm')
+const { packagedRuntimePaths } = require('./packaged-runtime-paths.cjs')
 
 /** Read manifests through the packaged Electron's ASAR filesystem, not the build checkout. */
 function verifyDependencyClosure(appRoot) {
@@ -143,12 +144,7 @@ async function verifyRuntime(appRoot, resources, executable) {
 }
 
 async function verifyPackagedHarness(context) {
-  const product = context.packager.appInfo.productFilename
-  const contents = path.join(context.appOutDir, `${product}.app`, 'Contents')
-  const resources = context.electronPlatformName === 'darwin' ? path.join(contents, 'Resources') : path.join(context.appOutDir, 'resources')
-  const executable = context.electronPlatformName === 'darwin'
-    ? path.join(contents, 'Frameworks', `${product} Helper.app`, 'Contents', 'MacOS', `${product} Helper`)
-    : path.join(context.appOutDir, `${product}.exe`)
+  const { resources, executable } = packagedRuntimePaths(context)
   try {
     const { stdout, stderr } = await promisify(execFile)(executable, [__filename, '--verify-runtime', path.join(resources, 'app.asar'), resources, executable], {
       cwd: context.appOutDir, env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },

@@ -4,7 +4,10 @@ export const UPDATE_STARTUP_JITTER_MS = 15_000
 export const AUTO_INSTALL_ON_APP_QUIT = false
 
 export function supportsAutoUpdates(isPackaged: boolean, platform: NodeJS.Platform): boolean {
-  return isPackaged && (platform === 'darwin' || platform === 'win32')
+  // electron-updater installs a Linux update through dpkg/apt with an elevation
+  // prompt, so the packaged deb is updatable the same way as the macOS and
+  // Windows installers. Unpackaged development builds still opt out.
+  return isPackaged && (platform === 'darwin' || platform === 'win32' || platform === 'linux')
 }
 
 export function shouldCheckAfterResume(lastCheckedAt: number, now = Date.now()): boolean {

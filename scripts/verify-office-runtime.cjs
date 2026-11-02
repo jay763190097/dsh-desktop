@@ -4,6 +4,7 @@ const path = require('node:path')
 const os = require('node:os')
 const { promisify } = require('node:util')
 const execFile = promisify(require('node:child_process').execFile)
+const { packagedRuntimePaths } = require('./packaged-runtime-paths.cjs')
 
 async function verifyOfficeRuntime(resources, executable, smokeScript = path.join(__dirname, 'office-runtime', 'smoke.py')) {
   const payload = path.join(resources, 'office-runtime', 'primary-runtime')
@@ -35,12 +36,7 @@ async function verifyOfficeRuntime(resources, executable, smokeScript = path.joi
 }
 
 async function afterPack(context) {
-  const product = context.packager.appInfo.productFilename
-  const contents = path.join(context.appOutDir, `${product}.app`, 'Contents')
-  const resources = process.platform === 'darwin' ? path.join(contents, 'Resources') : path.join(context.appOutDir, 'resources')
-  const executable = process.platform === 'darwin'
-    ? path.join(contents, 'Frameworks', `${product} Helper.app`, 'Contents', 'MacOS', `${product} Helper`)
-    : path.join(context.appOutDir, `${product}.exe`)
+  const { resources, executable } = packagedRuntimePaths(context)
   await verifyOfficeRuntime(resources, executable)
 }
 module.exports = { verifyOfficeRuntime, afterPack }

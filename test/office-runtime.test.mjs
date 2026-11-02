@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import { officeTarget, downloadAsset, unpackWheel, prepareOfficeRuntime } from '../scripts/office-runtime/prepare.mjs'
+import { manifestPlatform, officeTarget, downloadAsset, unpackWheel, prepareOfficeRuntime } from '../scripts/office-runtime/prepare.mjs'
 import { officeCliAttempts, officeCliCommand, officeCliTimedOut, officeCliTimeoutMs, runOfficeCli } from '../scripts/office-runtime/prepare-templates.mjs'
 import { HarnessRuntime } from '../src/main/runtime/harness-runtime'
 import { prepareHostPluginSourcesPatch } from '../src/main/state/host-plugin-sources'
@@ -79,7 +79,39 @@ describe('Office runtime assembly', () => {
     expect(officeTarget('win32', 'x64')).toBe('win-x64')
     expect(officeTarget('darwin', 'arm64')).toBe('mac-arm64')
     expect(officeTarget('darwin', 'x64')).toBe('mac-x64')
+    expect(officeTarget('linux', 'x64')).toBe('linux-x64')
+    expect(officeTarget('linux', 'arm64')).toBe('linux-arm64')
     expect(() => officeTarget('win32', 'arm64')).toThrow('unsupported native target')
+    expect(() => officeTarget('linux', 'armv7l')).toThrow('unsupported native target')
+  })
+
+  it('records the runtime manifest platform Node actually reports for the target', () => {
+    // verify-office-runtime.cjs compares this against process.platform, so a
+    // Linux payload labelled 'darwin' would fail packaging on its own host.
+    expect(manifestPlatform('win-x64')).toBe('win32')
+    expect(manifestPlatform('mac-arm64')).toBe('darwin')
+    expect(manifestPlatform('mac-x64')).toBe('darwin')
+    expect(manifestPlatform('linux-x64')).toBe('linux')
+    expect(manifestPlatform('linux-arm64')).toBe('linux')
+    expect(() => manifestPlatform('freebsd-x64')).toThrow('unknown target family')
+  })
+
+  it('keeps every locked target bound to wheels and an interpreter for its own family', async () => {
+    // A wheel or CPython artifact copied between targets would package a binary
+    // the target loader cannot dlopen, so lock entries must stay self-consistent.
+    const lock = JSON.parse(await readFile(join(root, 'scripts/office-runtime/lock.json'), 'utf8'))
+    const family = { win: 'windows', mac: 'apple-darwin', linux: 'linux-gnu' }
+    const wheelTag = { win: /win_amd64|win32/, mac: /macosx/, linux: /manylinux|musllinux/ }
+    for (const [name, entry] of Object.entries(lock.targets)) {
+      const [prefix, arch] = name.split('-')
+      expect(entry.pythonTarget).toContain(family[prefix])
+      expect(entry.pythonTarget).toContain(arch === 'x64' ? 'x86_64' : 'aarch64')
+      expect(/^[0-9a-f]{64}$/.test(entry.pythonSha256)).toBe(true)
+      for (const wheel of entry.wheels) {
+        expect(wheel.url.split('/').pop()).toMatch(wheelTag[prefix])
+        expect(/^[0-9a-f]{64}$/.test(wheel.sha256)).toBe(true)
+      }
+    }
   })
 
   it('rejects corrupt cached input and removes stale payload when preparation fails', async () => {
