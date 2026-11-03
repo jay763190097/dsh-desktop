@@ -21,7 +21,7 @@ async function createFixture(root) {
   const armZip = await writeFixture(root, 'dsh-desktop-mac-arm64.zip', Buffer.from('PK-arm'))
   const x64Zip = await writeFixture(root, 'dsh-desktop-mac-x64.zip', Buffer.from('PK-x64'))
   const windows = await writeFixture(root, 'dsh-desktop-windows-x64-setup.exe', Buffer.from('MZ-win'))
-  const linux = await writeFixture(root, 'dsh-desktop-linux-x64.deb', Buffer.from('!<arch>\nlinux-deb'))
+  const linux = await writeFixture(root, 'dsh-desktop-linux-amd64.deb', Buffer.from('!<arch>\nlinux-deb'))
   await Promise.all([
     writeFile(path.join(root, 'dsh-desktop-mac-arm64.dmg'), Buffer.concat([Buffer.alloc(512), Buffer.from('koly')])),
     writeFile(path.join(root, 'dsh-desktop-mac-x64.dmg'), Buffer.concat([Buffer.alloc(512), Buffer.from('koly')])),
@@ -110,7 +110,7 @@ describe('release asset verification', () => {
     const root = await mkdtemp(path.join(tmpdir(), 'dsh-release-assets-'))
     try {
       await createFixture(root)
-      await writeFile(path.join(root, 'dsh-desktop-linux-x64.deb'), 'not-a-deb')
+      await writeFile(path.join(root, 'dsh-desktop-linux-amd64.deb'), 'not-a-deb')
       await expect(
         verifyReleaseAssets(root, '1.2.3', { minimumBytes })
       ).rejects.toThrow('is not a deb (ar) archive')

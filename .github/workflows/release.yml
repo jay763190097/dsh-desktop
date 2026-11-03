@@ -741,7 +741,7 @@ jobs:
           name: linux-x64
           retention-days: 7
           path: |
-            dist/dsh-desktop-linux-x64.deb
+            dist/dsh-desktop-linux-amd64.deb
             dist/latest-linux.yml
           compression-level: 0
           if-no-files-found: error
@@ -751,7 +751,7 @@ jobs:
           name: linux-x64-dev
           retention-days: 3
           path: |
-            dist-dev/dsh-desktop-dev-linux-x64.deb
+            dist-dev/dsh-desktop-dev-linux-amd64.deb
             dist-dev/latest-linux.yml
           compression-level: 0
           if-no-files-found: error

@@ -7,7 +7,7 @@ The `Release desktop installers` Run workflow form has five inputs:
 | Input | Use |
 | --- | --- |
 | `mode` | `development` (default), `signed`, `prerelease`, `publish`, or `resign` |
-| `target` | `all` (default), `macos`, or `windows`; recovery publication requires `all`, resign requires `windows` |
+| `target` | `all` (default), `macos`, `windows`, or `linux`; recovery publication requires `all`, resign requires `windows` |
 | `version` | Leave empty for development. Use non-`v` semver for signed/prerelease/resign; use the existing `vX.Y.Z` tag for publish |
 | `source_run_id` | Original workflow run ID, required only for publish/resign |
 | `checks` | `standard` (default) or `extended` (adds Windows full tests, three-scale recovery UI, packaged desktop smoke and development archive verification) |
@@ -23,7 +23,9 @@ The `Release desktop installers` Run workflow form has five inputs:
     -f version=v0.13.0 -f source_run_id=40618960397
   ```
 
-  The workflow validates repository, unchanged tag SHA, original workflow, successful native/signing jobs and unexpired artifacts; reuses the three signed artifacts; repeats asset checks and Feishu human confirmation. Approval binds the original release SHA to the new run/attempt, and source identity is rechecked before publication. It never moves tags or changes installers. Do not use it to bypass failed packaging/signing or recover expired artifacts.
+  The workflow validates repository, unchanged tag SHA, original workflow, successful native/signing jobs and unexpired artifacts; reuses the platform artifacts (macOS Apple Silicon, macOS Intel, Windows x64 and the unsigned Linux x64 deb); repeats asset checks and Feishu human confirmation. Approval binds the original release SHA to the new run/attempt, and source identity is rechecked before publication. It never moves tags or changes installers. Do not use it to bypass failed packaging/signing or recover expired artifacts.
+
+Linux packages are not code-signed or notarized: `linux-x64` builds the deb, and the afterPack gates (packaged Harness boot, Office DOCX/PPTX/XLSX PDF conversion, PPT render) are the acceptance evidence. Publication additionally requires `dsh-desktop-linux-amd64.deb` plus `latest-linux.yml`, and the crash/update service must recognize the `linux` and `linux-arm64` platform keys before Linux installs can receive an update policy.
 
 Official releases still start by pushing a `v*` tag. The form is not an alternative to creating the official tag. `target` is honored: macOS-only runs do not build Windows and Windows-only runs do not build macOS.
 

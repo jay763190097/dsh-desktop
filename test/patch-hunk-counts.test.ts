@@ -35,6 +35,23 @@ describe('patch hunk counts', () => {
     expect(patch).toContain('+    "dsh-desktop-log-bridge": "0.1.0",')
   })
 
+  // Linux only reaches the WASM engine when the installed-package probe can
+  // tell "absent" from "present". Electron's asar fs answers a missing entry
+  // with null, which the upstream `!== void 0` check read as installed, so the
+  // packaged PPT preview and Office CLI both failed with "package is incomplete".
+  // The behavior itself is covered by the afterPack gates on a Linux runner;
+  // this contract keeps the hunk from being dropped on an upstream refresh
+  // before that same fix lands there.
+  it('keeps the null-safe Linux engine probe in the libreoffice-kit patch', async () => {
+    const patch = await readFile(patchPath('@deepseek-ai/libreoffice-kit'), 'utf8')
+    // The app loads lib/index.js while resources/office-cli.mjs loads lib/cli.js.
+    for (const file of ['lib/index.js', 'lib/cli.js']) {
+      expect(patch, file).toContain(`diff --git a/node_modules/@deepseek-ai/libreoffice-kit/${file}`)
+    }
+    expect(patch).toContain('return entry !== void 0 && entry !== null;')
+    expect(patch.match(/function installedPackageExists\(name\) \{/g)).toHaveLength(2)
+  })
+
   it('rejects a dsh hunk header that undercounts the merged dependency lines', async () => {
     const patch = await readFile(patchPath('@deepseek-ai/dsh'), 'utf8')
     const manifestStart = patch.indexOf('diff --git a/node_modules/@deepseek-ai/dsh/package.json')

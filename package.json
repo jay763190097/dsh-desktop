@@ -563,6 +563,7 @@
     },
     "linux": {
       "executableName": "dsh-desktop",
+      "maintainer": "DataElement <jiangmang.1992@163.com>",
       "icon": "build/icon.png",
       "category": "Development",
       "synopsis": "Desktop shell for DeepSeek Harness",

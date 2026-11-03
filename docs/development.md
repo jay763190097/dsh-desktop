@@ -122,11 +122,17 @@ npm run package:mac:x64
 
 # Windows x64 NSIS installer, on a Windows x64 machine or runner
 npm run package:win
+
+# Linux x64 deb, on a Linux x64 machine or runner
+npm run package:linux
+
+# Linux arm64 deb, on a Linux arm64 machine or runner
+npm run package:linux:arm64
 ```
 
 Do not invoke `electron-builder --win` from macOS or Linux for a distributable Windows package. The target verification scripts intentionally reject host/target mismatches.
 
-For local unsigned development packages, use the corresponding `package:dev:*` command. Packages run Harness and package commands through the packaged Electron runtime (a utility process and the Helper in Node mode on macOS, the executable in Node mode on Windows); no standalone `node_modules/node` may be present under `app.asar.unpacked`. Verify the packaged native-module, pnpm and Harness smokes, then the final signed installer's separate installed-app smoke before handoff. Office preparation is included in dev, build and test: it fetches hash-locked native Python and wheels into `.build/office-runtime`, outside ASAR, and ships no second Node runtime. See [Office runtime](office-runtime.md). The locked Electron 44.7.0 must remain compatible with the native loader: `scripts/verify-target.mjs` fails packaging when Electron in Node mode cannot load it, and changing Electron still requires a new Windows package qualification. Before packaging, `node scripts/probe-electron-node-runtime.mjs` boots Harness from the repository through Electron Node mode with a disposable `DSH_HOME` and checks an authenticated HTTP response; the Windows CI job runs it on every build.
+For local unsigned development packages, use the corresponding `package:dev:*` command. Packages run Harness and package commands through the packaged Electron runtime (a utility process and the Helper in Node mode on macOS, the executable in Node mode on Windows and Linux); no standalone `node_modules/node` may be present under `app.asar.unpacked`. Verify the packaged native-module, pnpm and Harness smokes, then the final signed installer's separate installed-app smoke before handoff. Office preparation is included in dev, build and test: it fetches hash-locked native Python and wheels into `.build/office-runtime`, outside ASAR, and ships no second Node runtime. See [Office runtime](office-runtime.md). The locked Electron 44.7.0 must remain compatible with the native loader: `scripts/verify-target.mjs` fails packaging when Electron in Node mode cannot load it, and changing Electron still requires a new Windows package qualification. Before packaging, `node scripts/probe-electron-node-runtime.mjs` boots Harness from the repository through Electron Node mode with a disposable `DSH_HOME` and checks an authenticated HTTP response; the Windows CI job runs it on every build.
 
 Formal release artifacts are built, signed, and published by the tag workflow. A local build or pull-request check is not formal release evidence.
 

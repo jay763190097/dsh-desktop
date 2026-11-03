@@ -317,7 +317,7 @@ describe('GitHub release contract', () => {
       'latest-mac.yml',
       'latest.yml',
       'latest-linux.yml',
-      'dsh-desktop-linux-x64.deb',
+      'dsh-desktop-linux-amd64.deb',
       'dsh-desktop-mac-${{ matrix.arch }}.zip.blockmap',
       'dsh-desktop-windows-x64-setup.exe.blockmap'
     ]) {
@@ -436,8 +436,8 @@ describe('GitHub release contract', () => {
     expect(workflow).toContain('name: windows-x64-dev')
     expect(workflow).toContain('dist-dev/dsh-desktop-dev-windows-x64-setup.exe')
     expect(workflow).toContain('name: linux-x64-dev')
-    expect(workflow).toContain('dist-dev/dsh-desktop-dev-linux-x64.deb')
-    expect(workflow).toContain('dist/dsh-desktop-linux-x64.deb')
+    expect(workflow).toContain('dist-dev/dsh-desktop-dev-linux-amd64.deb')
+    expect(workflow).toContain('dist/dsh-desktop-linux-amd64.deb')
     expect(workflow).toContain('dsh-desktop-mac-${{ matrix.arch }}.dmg')
     expect(workflow).toContain('dsh-desktop-windows-x64-setup.exe')
     expect(

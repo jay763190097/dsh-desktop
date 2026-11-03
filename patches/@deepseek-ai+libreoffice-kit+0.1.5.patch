@@ -1,5 +1,26 @@
+diff --git a/node_modules/@deepseek-ai/libreoffice-kit/lib/cli.js b/node_modules/@deepseek-ai/libreoffice-kit/lib/cli.js
+index 18ffbc7..6c51515 100755
+--- a/node_modules/@deepseek-ai/libreoffice-kit/lib/cli.js
++++ b/node_modules/@deepseek-ai/libreoffice-kit/lib/cli.js
+@@ -1483,7 +1483,15 @@ const ENGINE_PREFIX = "@deepseek-ai/libreoffice-kit";
+ * @returns true when at least one resolution directory holds the package.
+ */
+ function installedPackageExists(name) {
+-	return (require.resolve.paths(name) ?? []).some((directory) => lstatSync(join(directory, name), { throwIfNoEntry: false }) !== void 0);
++	// Electron's asar-patched fs reports a missing entry as null rather than the
++	// undefined plain Node returns, so a bare `!== void 0` reported every
++	// resolution directory as holding the package. On Linux that hid the
++	// documented WASM fallback and the engine failed as "package is incomplete".
++	// Drop this hunk once upstream ships a null-safe probe.
++	return (require.resolve.paths(name) ?? []).some((directory) => {
++		const entry = lstatSync(join(directory, name), { throwIfNoEntry: false });
++		return entry !== void 0 && entry !== null;
++	});
+ }
+ /**
+ * Return the optional package target for the current process ABI.
 diff --git a/node_modules/@deepseek-ai/libreoffice-kit/lib/index.js b/node_modules/@deepseek-ai/libreoffice-kit/lib/index.js
-index aac18a0..2fb9f70 100644
+index aac18a0..13f5e61 100644
 --- a/node_modules/@deepseek-ai/libreoffice-kit/lib/index.js
 +++ b/node_modules/@deepseek-ai/libreoffice-kit/lib/index.js
 @@ -994,9 +994,26 @@ function plan(ready, request) {
@@ -39,7 +60,24 @@ index aac18a0..2fb9f70 100644
  			}
  			child.stdin.end("DONE\n");
  			if ((await response()).kind !== "done") throw new Error("LibreOffice native renderer did not finish.");
-@@ -2029,7 +2048,7 @@ function createConverterWith(resolvedOptions, engine, shared, onDispose) {
+@@ -1481,7 +1500,15 @@ const ENGINE_PREFIX = "@deepseek-ai/libreoffice-kit";
+ * @returns true when at least one resolution directory holds the package.
+ */
+ function installedPackageExists(name) {
+-	return (require.resolve.paths(name) ?? []).some((directory) => lstatSync(join(directory, name), { throwIfNoEntry: false }) !== void 0);
++	// Electron's asar-patched fs reports a missing entry as null rather than the
++	// undefined plain Node returns, so a bare `!== void 0` reported every
++	// resolution directory as holding the package. On Linux that hid the
++	// documented WASM fallback and the engine failed as "package is incomplete".
++	// Drop this hunk once upstream ships a null-safe probe.
++	return (require.resolve.paths(name) ?? []).some((directory) => {
++		const entry = lstatSync(join(directory, name), { throwIfNoEntry: false });
++		return entry !== void 0 && entry !== null;
++	});
+ }
+ /**
+ * Return the optional package target for the current process ABI.
+@@ -2029,7 +2056,7 @@ function createConverterWith(resolvedOptions, engine, shared, onDispose) {
  			}
  		}
  	}
@@ -48,7 +86,7 @@ index aac18a0..2fb9f70 100644
  		await acquire(signal);
  		const deadline = new AbortController();
  		const stopped = AbortSignal.any([signal, deadline.signal]);
-@@ -2060,7 +2079,13 @@ function createConverterWith(resolvedOptions, engine, shared, onDispose) {
+@@ -2060,7 +2087,13 @@ function createConverterWith(resolvedOptions, engine, shared, onDispose) {
  				fontCache: [...shared.fontCache.values()]
  			}, stopped, (entries) => mergeCache(fonts.generation, entries));
  			let images;
@@ -63,7 +101,7 @@ index aac18a0..2fb9f70 100644
  			else if ("fonts" in result) {
  				const profile = join(scratch, "profile");
  				images = await renderImagesWithNative({
-@@ -2074,6 +2099,7 @@ function createConverterWith(resolvedOptions, engine, shared, onDispose) {
+@@ -2074,6 +2107,7 @@ function createConverterWith(resolvedOptions, engine, shared, onDispose) {
  					substitutions: result.substitutions,
  					missingFonts: result.missingFonts,
  					operation: request,
@@ -71,7 +109,7 @@ index aac18a0..2fb9f70 100644
  					signal: stopped
  				});
  			} else throw new ConversionError("failed", "Image worker did not return its manifest.");
-@@ -2114,8 +2140,9 @@ function createConverterWith(resolvedOptions, engine, shared, onDispose) {
+@@ -2114,8 +2148,9 @@ function createConverterWith(resolvedOptions, engine, shared, onDispose) {
  	const converter = {
  		backend: engine.backend,
  		render: (request, signal) => submit(request, "render", signal),
@@ -84,7 +122,7 @@ index aac18a0..2fb9f70 100644
  			task.finally(() => active.delete(task)).catch(() => {});
  			return task;
 diff --git a/node_modules/@deepseek-ai/libreoffice-kit/lib/types/index.d.ts b/node_modules/@deepseek-ai/libreoffice-kit/lib/types/index.d.ts
-index a58dce3..f92027d 100644
+index a58dce3..1af8c47 100644
 --- a/node_modules/@deepseek-ai/libreoffice-kit/lib/types/index.d.ts
 +++ b/node_modules/@deepseek-ai/libreoffice-kit/lib/types/index.d.ts
 @@ -1,4 +1,4 @@
@@ -106,7 +144,7 @@ index a58dce3..f92027d 100644
      convert(request: ConversionRequest, signal?: AbortSignal): Promise<RenderResult>;
      /**
 diff --git a/node_modules/@deepseek-ai/libreoffice-kit/lib/types/native-image-renderer.d.ts b/node_modules/@deepseek-ai/libreoffice-kit/lib/types/native-image-renderer.d.ts
-index 01be9f4..7570061 100644
+index 01be9f4..a7f3884 100644
 --- a/node_modules/@deepseek-ai/libreoffice-kit/lib/types/native-image-renderer.d.ts
 +++ b/node_modules/@deepseek-ai/libreoffice-kit/lib/types/native-image-renderer.d.ts
 @@ -1,4 +1,4 @@
@@ -122,3 +160,4 @@ index 01be9f4..7570061 100644
 +    readonly onImage?: (image: RenderedImage, pageCount: number) => void | Promise<void>;
  }): Promise<RenderImagesResult>;
  //# sourceMappingURL=native-image-renderer.d.ts.map
+\ No newline at end of file
